@@ -1,0 +1,133 @@
+---
+title: "NBA数据降维分析"
+author: <span style="font-family:楷体;font-size:23px;">DWB</span>
+date: "2020/12/26"
+output: 
+  html_document:
+    toc: true
+    toc_depth: 4
+    toc_float:
+      collapsed: false
+      smooth_scroll: false
+---
+
+
+## $\textbf{·}$ 数据读入
+
+<span style="font-family:楷体;font-size:19px;">　　将训练数据集NBA.xlsx读入，并进行标准化处理：</span>
+
+```{r message=FALSE, warning=FALSE}
+setwd("E:\\大学\\课程\\专业必修\\大三上\\统计机器学习\\HW\\HW9\\NBA数据分析降维")
+library(openxlsx)
+data <- read.xlsx("NBA.xlsx")
+data[, -1] = scale(data[, -1])
+```
+
+
+
+## $\textbf{·}$ 主成分分析
+### $\textbf{·}$ 主成分选择
+<span style="font-family:楷体;font-size:19px;">　　对所有的自变量（因此，不包含因变量“生涯总得分”）进行主成分分析，绘制碎石图，并选择主成分个数：</span>
+
+```{r message=FALSE, warning=FALSE}
+library(psych)
+fa.parallel(data[, 2:18], fa = "pc", show.legend = F, main = "Scree plot")
+```
+
+<span style="font-family:楷体;font-size:19px;">　　从图中可以看到，虽然拐点出现在2，但是是无论按照累计方差贡献率，还是按照Kaiser准则，都不能只保留一个主成分。这里我们选择三个主成分。</span>
+
+### $\textbf{·}$ 结果解读
+```{r message=FALSE, warning=FALSE}
+pr <- princomp(data[, 2:18])
+summary(pr)
+```
+<span style="font-family:楷体;font-size:19px;">　　从主成分分析的结果可以看出，保留三个主成分符合Kaiser准则，并且累计方差贡献率达到$79.9\%$，较为合理。</span>
+
+<span style="font-family:楷体;font-size:19px;">　　查看前三个主成分关于各个原始变量的系数如下：</span>
+
+```{r message=FALSE, warning=FALSE}
+round(unclass(pr$loadings[, 1:3]), 3)
+```
+
+
+<span style="font-family:楷体;font-size:19px;">　　我们可以发现，第一个主成分关于各个变量的系数相对比较综合，因此明星球员（出场数多、球权多）、在NBA效力时间久的球员第一主成分得分会高；第二主成分主要与三分命中率、三分命中次数、三分出手次数有关，衡量一个球员的三分能力，又因为其系数均为负，因此往往是三分出手多、命中多的后卫球员会有较低的第二主成分得分，内线球员如中锋等，第二主成分得分反而会高；第三主成分主要由投篮命中率、罚球命中率有关，一般而言内线球员因为在板下出手多，所以投篮命中率会高，在外线出手的球员一般会较低，但是第三主成分同时也受罚球命中率的影响，所以内线球员得分也不会过高，相比前两个主成分，第三主成分的绝对值应该会普遍偏小。</span>
+
+
+
+## $\textbf{·}$ 主成分得分解读
+<span style="font-family:楷体;font-size:19px;">　　计算每一位球员的主成分得分，并挑选几位球员进行查看与解读：</span>
+
+```{r message=FALSE, warning=FALSE}
+index <- c(1, 5, 14, 36, 37, 2000)
+scores <- pr$scores[, 1:3]
+scores <- scale(apply(scores, 2, as.numeric))
+scores <- cbind(data[, 1], round(pr$scores[, 1:3], 2))
+scores[index, ]
+```
+
+<span style="font-family:楷体;font-size:19px;">　　我们可以看到，相比前面这些明星球员，"卢克-辛歇尔"的第一主成分就很低，而"勒布朗-詹姆斯"的季后赛出场数位于历史第二，球权等也很多，因此其第一主成分得分很高；在第二主成分上，可以看到以三分著称的"斯蒂芬-库里"第二主成分得分较低，而内线球员"沙奎尔-奥尼尔"、"哈基姆-奥拉朱旺"因为三分出手很少，因此第二主成分得分较高；第三主成分也是，内线球员因为投篮命中率一般较高，因此也会有较高的第三主成分得分；与之前的分析相符。</span>
+
+## $\textbf{·}$ k-means聚类
+<span style="font-family:楷体;font-size:19px;">　　根据聚类个数和样本点到聚类中心距离的平方和绘制碎石图，确定聚类的类别个数如下：</span>
+
+```{r message=FALSE, warning=FALSE}
+sg <- rep(0,8)
+set.seed(1)
+sg <- 1:8
+sst <- sapply(sg, function(i){sum(kmeans(scores[, 2:4], centers = i)$withinss)})
+
+par(family = 'Hei')
+plot(sg, sst, type = 'b', xlab = 'Numbers of Clusters', ylab = "Sum of withnss")
+for(i in 1:8){
+  sg[i] <- sum(kmeans(scores[, 2:4],centers = i)$withinss)
+} 
+
+```
+
+<span style="font-family:楷体;font-size:19px;">　　可以看到拐点出现在4的位置，因此我们选择前3个来进行聚类分析：</span>
+
+```{r message=FALSE, warning=FALSE}
+set.seed(1)
+kmean <- kmeans(scores[, 2:4], centers = 3)
+```
+
+<span style="font-family:楷体;font-size:19px;">　　将可视化结果展示如下：</span>
+
+```{r message=FALSE, warning=FALSE}
+scores <- as.data.frame(scores)
+scores$cluster <- kmean$cluster
+library(scatterplot3d)
+plot3d <- with(scores, scatterplot3d(Comp.1, Comp.2, Comp.3, color = as.numeric(cluster)))
+```
+
+
+<span style="font-family:楷体;font-size:19px;">　　可以看到，数据聚成3类，其中绿色最多，因为其第一主成分值较小，推测为非明星球员，这种角色球员在NBA中数量很多，符合常理；根据我们之前的分析，另外两种颜色第一主成分均较大，而二、三主成分有所差异，可能分别代表明星球员中的外线和内线球员，他们具有不同的第二主成分和第三主成分得分。</span>
+
+
+## $\textbf{·}$ 编程练习（PCA函数）
+<span style="font-family:楷体;font-size:19px;">　　首先，定义PCA函数如下：</span>
+```{r message=FALSE, warning=FALSE}
+PCA <- function(Dat, max.k){
+  R <- cor(Dat)
+  Eig <- eigen(R)
+  vars <- Eig$values[1:max.k]
+  coef <- Eig$vectors[, 1:max.k]
+  return(list(vars = vars, alphas = coef))
+}
+```
+
+<span style="font-family:楷体;font-size:19px;">　　使用自定义的PCA函数，对NBA数据集的所有自变量（不包含因变量“生涯总得分”）进行分析，并绘制碎石图如下：</span>
+
+```{r message=FALSE, warning=FALSE}
+data <- read.xlsx("NBA.xlsx")
+test.dat <- data[, 2:18]
+pca <- PCA(test.dat, 10)
+
+plot(1:10, pca$vars, type ="b", main = "ScreePlot", xlab = "Compent Number", ylab = "Eigen Values")
+```
+
+
+
+
+
+

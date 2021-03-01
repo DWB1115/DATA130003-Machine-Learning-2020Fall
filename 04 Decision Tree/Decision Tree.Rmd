@@ -1,0 +1,96 @@
+---
+title: "征信系列-用户行为数据分析 "
+author: <span style="font-family:楷体;font-size:23px;">DWB</span>
+date: "2020/11/20"
+output: 
+  html_document:
+    toc: true
+    toc_depth: 4
+    toc_float:
+      collapsed: false
+      smooth_scroll: false
+---
+### $\textbf{·}$ 数据读入
+
+<span style="font-family:楷体;font-size:17px;">　　将训练数据集simudata.csv读入：</span>
+
+```{r message=FALSE, warning=FALSE}
+setwd("E:\\大学\\课程\\专业必修\\大三上\\统计机器学习\\HW\\HW6")
+all.data <- read.csv(file="simudata.csv", header=T)
+```
+
+### $\textbf{·}$ 箱线图绘制与解读
+
+<span style="font-family:楷体;font-size:17px;">　　分别绘制交易笔数-是否违约与用户所有行为金额均值-是否违约箱线图如下所示：</span>
+
+```{r message=FALSE, warning=FALSE}
+library(ggplot2)
+library(grid)
+pic1 <- ggplot(all.data, aes(group = black, x = black, y = billnum)) + 
+  geom_boxplot(fill = c('#00FFFF', '#FFB6C1')) + 
+  labs(title = "交易笔数-是否违约箱线图", x = "是否违约", y = "交易笔数(笔)")
+pic2 <- ggplot(all.data, aes(group = black, x = black, y = meanpay/10000)) + 
+  geom_boxplot(fill = c('#00FFFF', '#FFB6C1')) + 
+  labs(title = "交易行为平均金额-是否违约箱线图", x = "是否违约", y = "平均金额(万元)")
+grid.newpage() 
+pushViewport(viewport(layout = grid.layout(1,2)))
+vplayout <- function(x,y){
+  viewport(layout.pos.row = x, layout.pos.col = y)
+}
+print(pic1, vp = vplayout(1,1))   
+print(pic2, vp = vplayout(1,2))   
+```
+
+<span style="font-family:楷体;font-size:17px;">　　从上箱线图可以发现，相比于那些没有违约的用户群体，违约用户群体有着交易笔数较少、交易行为的平均金额较低的特点。</span>
+
+### $\textbf{·}$ 决策树模型的建立与预测
+#### $\textbf{·}$ 数据集划分
+
+<span style="font-family:楷体;font-size:17px;">　　设置随机数种子为1234，将数据集按照7：3的比例划分为训练集和测试集如下：</span>
+
+```{r message=FALSE, warning=FALSE}
+set.seed(1234)
+sub <- sample(1 : nrow(all.data), round(nrow(all.data) * 0.7))
+train.data <- all.data[sub, ]
+test.data <- all.data[-sub, ]
+```
+
+#### $\textbf{·}$ 模型训练
+
+<span style="font-family:楷体;font-size:17px;">　　使用分类决策树模型进行建模，并简要查看其信息如下：</span>
+
+```{r message=FALSE, warning=FALSE}
+library(rpart)
+model <- rpart(black ~ ., data = train.data, method = "class")
+printcp(model)
+```
+
+<span style="font-family:楷体;font-size:17px;">　　可以看到，最终得到的决策树在所有的特征中，仅银行卡数、借贷比率、借记类F（频率）、交易金额最大值、交易金额平均值、信贷类R（最近一次）、转账类F（频率）被使用到，其余特征未被使用。</span>
+
+#### $\textbf{·}$ 测试集上的ROC曲线
+
+<span style="font-family:楷体;font-size:17px;">　　使用训练得到的模型对测试集进行预测，并绘制其ROC曲线与AUC值如下：</span>
+
+```{r message=FALSE, warning=FALSE}
+pred <- predict(model, newdata = test.data)
+library(pROC)
+roc_curve <- roc(test.data$black, pred[ , 2])
+x1 <- 1 - roc_curve$specificities
+y1 <- roc_curve$sensitivities
+ggplot(mapping = aes(x = x1, y = y1)) + geom_line(colour = 'red') + geom_abline(intercept = 0, slope = 1) +
+  annotate('text', x = 0.3, y = 0.43, label = paste('AUC=', round(roc_curve$auc,4))) +
+  labs(x = '1 - Specificity',y = 'Sensitivity', title = 'ROC Curve of Test Data')
+```
+
+<span style="font-family:楷体;font-size:17px;">　　看到AUC只有0.6682，预测效果不是特别理想。观察该ROC曲线相比逻辑回归时的AUC曲线平滑，我分析其原因为，决策树会将拥有一些相同特征的数据划分进同一个叶子节点中，这样会有很多数据拥有相同的预测概率值，这样将会导致ROC曲线相对平滑，不那么曲折。</span>
+
+### $\textbf{·}$ 决策树图形与解读
+
+<span style="font-family:楷体;font-size:17px;">　　绘制我们的决策树模型如下：</span>
+
+```{r message=FALSE, warning=FALSE}
+library(rpart.plot)
+rpart.plot(model, branch=1, type=2, fallen.leaves=T, cex=0.7)
+```
+
+<span style="font-family:楷体;font-size:17px;">　　决策树每个节点中有三个信息，最上面的“0”或“1”代表符合该特征的节点将被模型预测为“0”（不会违约）或“1”（会违约）；中间的小数表示概率，代表符合该特征的训练数据中，有多少比例是“1”（会违约），也即表示符合这些特征的数据，最终会违约的经验概率；最后的百分数表示占比，即在该节点上的数据，占训练数据总量的百分比。内部节点也含有这些信息的原因为，这些信息是若将该内部节点下面的节点进行剪枝，该内部节点变为叶子节点后的信息。</span>

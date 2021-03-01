@@ -1,0 +1,311 @@
+---
+title: "合租模式下的租房价格分析"
+author: <span style="font-family:楷体;font-size:23px;">DWB</span>
+date: "2020/10/16"
+output: 
+  html_document:
+    toc: true
+    toc_depth: 4
+    toc_float:
+      collapsed: false
+      smooth_scroll: false
+---
+
+
+### $\textbf{·}$ 数据读入与汇总统计
+<span style="font-family:楷体;font-size:17px;">　　首先，将老师所给数据集data.csv读入：</span>
+```{r, font-size:10px}
+setwd("E:\\大学\\课程\\专业必修\\大三上\\统计机器学习\\HW\\HW3")
+house.data <- read.csv(file="data.csv", header=T)
+```
+<span style="font-family:楷体;font-size:17px;">　　可以查看其汇总统计信息如下：</span>
+
+```{r}
+library(knitr)
+kable(summary(house.data))
+```
+
+
+
+### $\textbf{·}$ 月租金的大致分布
+
+<span style="font-family:楷体;font-size:17px;">　　分析总体数据中的月租金数据，绘制其直方图如下：</span>
+
+```{r}
+hist(house.data$rent, col = '#6495ED', main = "北京合租房月租金(N = 5149)", xlab = '租金（元/月）')
+```
+
+<span style="font-family:楷体;font-size:17px;">　　可以看到，月租金分布在2000到3000元之间最多，最低月租金不低于1000元，最高不超过6500元，总体形状呈现右偏。</span>
+
+
+### $\textbf{·}$ 不同城区租房价格分布
+<span style="font-family:楷体;font-size:17px;">　　选取平均租金最高的8个城区，绘制降序平均租金柱状图如下：</span>
+```{r}
+ave.rent <- sort(tapply(house.data$rent, house.data$region, mean), decreasing =T)
+barplot(ave.rent[1:8], col = '#6495ED')
+```
+
+<span style="font-family:楷体;font-size:17px;"> 　可以看到，城区之间平均月租金差异明显，在平均月租金前八的城区内，西城有着最高的平均月租金，接近4000元，而通州最低，大约只有2400元左右。</span>
+
+### $\textbf{·}$ 月租金-城区 分组箱线图
+<span style="font-family:楷体;font-size:17px;">　　绘制月租金(rent)-城区(region)分组箱线图如下：</span>
+```{r results = 'hide'}
+library(ggplot2)
+```
+```{r}
+ggplot(house.data, aes(x=reorder(region, rent, median), y=rent/1000)) + 
+  geom_boxplot() + labs(title="rent-region 分组箱线图",x="城区", y = "月租金(千元)")
+```
+
+
+<span style="font-family:楷体;font-size:17px;">　　可以看到，城区之间平均月租金差异明显，部分城区内部也有较大的波动。比如在朝阳、海淀，不同房源间的月租金有较大差异。</span>
+
+
+### $\textbf{·}$ 线性回归模型
+#### $\textbf{·}$ 模型构建
+<span style="font-family:楷体;font-size:17px;">　　首先为几个定性变量设置对应的哑变量基准组：<br/>
+
+<span style="font-family:楷体;font-size:15px;">　　　　　*租赁房间变量以“次卧”作为基准组<br/>
+
+<span style="font-family:楷体;font-size:15px;">　　　　　*所在楼层分组变量以“低楼层”作为基准组<br/>
+
+<span style="font-family:楷体;font-size:15px;">　　　　　*邻近地铁变量以“否”作为基准组<br/>
+
+<span style="font-family:楷体;font-size:15px;">　　　　　*城区变量以“石景山”作为基准组<br/>
+
+<span style="font-family:楷体;font-size:15px;">　　　　　*供暖方式变量以“自采暖”作为基准组<br/>
+
+<span style="font-family:楷体;font-size:17px;">　　并且将月租金(rent)除以1000，方便观察后续的回归系数。<br/>
+```{r}
+# 租赁房间变量以“次卧”作为基准组
+house.data$room <- factor(house.data$room, levels = c('次卧','主卧'))
+# 所在楼层分组变量以“低楼层”作为基准组
+house.data$floor_grp <- factor(house.data$floor_grp, levels =c('低楼层','中楼层','高楼层'))
+# 邻近地铁变量以“否”作为基准组
+house.data$subway <- factor(house.data$subway, levels = c('否','是'))
+# 城区变量以“石景山”作为基准组
+region.sort <- c( '石景山','西城','海淀','朝阳','东城','丰台','昌平','通州','大兴','顺义','房山')
+house.data$region <- factor(house.data$region, levels = region.sort)
+# 供暖方式变量以“自采暖”作为基准组
+house.data$heating <- factor(house.data$heating, levels = c('自采暖','集中供暖'))
+# 将租金除1000，方便观察回归系数
+house.data$rent <- house.data$rent/1000
+```
+
+<span style="font-family:楷体;font-size:17px;">　　以月租金（rent)为因变量，其余为自变量建立线性回归模型，并且查看结果如下：</span>
+
+```{r}
+lm1 = lm(rent~ area + room + bedroom + livingroom + bathroom + heating + floor_grp + subway + region, 
+         data = house.data)
+summary(lm1)
+```
+
+<span style="font-family:楷体;font-size:17px;">　　可以看到，各变量的回归系数以及F检验，$R^2$结果如下表所示：</span>
+
+<table Bordercolor=#336699>
++:---------------:+:-------------:+:-----------------:+:-----------------:+
+| 变量            | 回归系数      | p值               |  备注             |
++:===============:+:=============:+:=================:+:=================:+
+| 截距项          | 1.593         | <.0001            |                   |
++:---------------:+:-------------:+:-----------------:+:-----------------:+
+| 房间面积        | 0.077         | <.0001            |                   |
++:---------------:+:-------------:+:-----------------:+:-----------------:+
+| 是主卧          |8.443×$10^{-5}$| 0.996             |                   |
++:---------------:+:-------------:+:-----------------:+:-----------------:+
+| 卧室数          | -0.091        | <.0001            |                   |
++:---------------:+:-------------:+:-----------------:+:-----------------:+
+| 厅数            |  -0.168       | 0.019             |                   |
++:---------------:+:-------------:+:-----------------:+:-----------------:+
+| 卫生间数        |  0.182        | <.0001            |                   |
++:---------------:+:-------------:+:-----------------:+:-----------------:+
+| 是集中供暖      |  0.156        | <.0001            |基准组：自供暖     |
++:---------------:+:-------------:+:-----------------:+:-----------------:+
+|楼层-中楼层<br/> | -0.056<br/>   | 0.0003<br/>       |基准组：低楼层     |
+| 楼层-高楼层     | -0.025        | 0.117             |                   |
++:---------------:+:-------------:+:-----------------:+:-----------------:+
+| 是地铁房        |  0.280        | <.0001            |                   |
++:---------------:+:-------------:+:-----------------:+:-----------------:+
+|城区-西城<br/>   |  0.939<br/>   | <.0001<br/>       | &nbsp;<br/>       |
+|城区-海淀<br/>   |  0.879<br/>   | <.0001<br/>       |    <br/>          |
+|城区-朝阳<br/>   |  0.632<br/>   | <.0001<br/>       |    <br/>          |
+|城区-东城<br/>   |  0.565<br/>   | <.0001<br/>       |    <br/>          |
+|城区-丰台<br/>   |  0.118<br/>   | 0.0007<br/>       |基准组：石景山     |
+|城区-昌平<br/>   |  0.057<br/>   | 0.093<br/>        |    <br/>          |
+|城区-通州<br/>   | -0.373<br/>   | <.0001<br/>       |    <br/>          |
+|城区-大兴<br/>   | -0.422<br/>   |  <.0001<br/>      |                   |
+|城区-顺义<br/>   | -0.451<br/>   | <.0001<br/>       |                   |
+|城区-房山        | -0.812        | <.0001            |                   |
++:---------------:+:-------------:+:-----------------:+:-----------------:+
+|                 |               |                   |                   |
++:---------------:+:-------------:+:-----------------:+:-----------------:+
+|F检验            |p值<.0001      |  调整后的$R^2$    | 0.6453            |
++:---------------:+:-------------:+:-----------------:+:-----------------:+
+|                 |               |                   |                   |
++:---------------:+:-------------:+:-----------------:+:-----------------:+
+</table>
+
+<span style="font-family:楷体;font-size:17px;">　　定量变量的相关系数为正，代表其他因素一定，当变量取值越大，月租金越高；相关系数为负，代表其他因素一定，当变量取值越大，月租金越低。比如当房间面积越大，月租金就会越高。而在一组哑变量中，相关系数为正，代表在其他因素一定时，相比于基准组，变量取该值时的月租金更高；相关系数为负，代表在其他因素一定时，相比于基准组，变量取该值时的月租金更低。比如在城区中，相比于石景山，当其他因素都一定时，位于西城的房源有着更高的月租金，而位于通州的房源有着更低的月租金。另外，相关系数的绝对值越大，证明其对租金的影响越大，比如“是否为主卧”，对租金影响就不是很明显。</span>
+
+<span style="font-family:楷体;font-size:17px;">　　其中卧室数、厅数变多，租金反而下降，推测是因为这是合租房，虽然这两者变多会导致总租金变高，但是因为可以容纳更多的租客，因此人均月租金会变低。对于其余变量的分析——在除该变量外其余变量一定时，有：房间面积越大、卫生间数越多，月租金会越高；集中采暖的房源相比自采暖的房源租金更高；相比于次卧，主卧的租金相对更高；相比于非地铁房，靠近地铁的房源有着更高的租金；相比于低楼层，中、高楼层月租金更低（关于为什么高楼层相比中楼层租金高，推测可能高楼层拥有更好的视野）；相比于石景山城区，西城等城区的租金更高，而房山等城区的租金更低。</span>
+
+#### $\textbf{·}$ 模型诊断
+<span style="font-family:楷体;font-size:17px;">　　对上述回归模型进行模型诊断如下：</span>
+```{r}
+par(mfrow = c(2,2))
+plot(lm1, which = c(1:4))
+```
+
+### $\textbf{·}$ 变量选择
+<span style="font-family:楷体;font-size:17px;">　　对上述回归模型，利用BIC准则进行变量选择如下：</span>
+```{r results = 'hide'}
+slm1 <- step(lm1, direction = 'both', k = log(dim(house.data)[1]))
+```
+```{r}
+summary(slm1)
+```
+
+<span style="font-family:楷体;font-size:17px;"> 　可以发现，经过BIC准则的选择，原来的9个变量变为6个，分别是：租赁房间面积(area)、卧室数(bedroom)、卫生间数(bathroom)、供暖方式(heating)、是否邻近地铁(subway)、所在城区(region)；以下3个变量被去除：租赁房间类型(room)、厅数(livingroom)、所在楼层(floor_grp)。具体结果由下表展示：</span>
+
+<table Bordercolor=#336699>
++:---------------:+:-------------:+:-----------------:+:-----------------:+
+| 变量            | 回归系数      | p值               |  备注             |
++:===============:+:=============:+:=================:+:=================:+
+| 截距项          | 1.440         | <.0001            |                   |
++:---------------:+:-------------:+:-----------------:+:-----------------:+
+| 房间面积        | 0.077         | <.0001            |                   |
++:---------------:+:-------------:+:-----------------:+:-----------------:+
+| 卧室数          | -0.091        | <.0001            |                   |
++:---------------:+:-------------:+:-----------------:+:-----------------:+
+| 卫生间数        |  0.142        | 0.0005            |                   |
++:---------------:+:-------------:+:-----------------:+:-----------------:+
+| 是集中供暖      |  0.155        | <.0001            |基准组：自供暖     |
++:---------------:+:-------------:+:-----------------:+:-----------------:+
+| 是地铁房        |  0.281        | <.0001            |                   |
++:---------------:+:-------------:+:-----------------:+:-----------------:+
+|城区-西城<br/>   |  0.935<br/>   | <.0001<br/>       | &nbsp;<br/>       |
+|城区-海淀<br/>   |  0.881<br/>   | <.0001<br/>       |    <br/>          |
+|城区-朝阳<br/>   |  0.635<br/>   | <.0001<br/>       |    <br/>          |
+|城区-东城<br/>   |  0.566<br/>   | <.0001<br/>       |    <br/>          |
+|城区-丰台<br/>   |  0.119<br/>   | 0.0006<br/>       |基准组：石景山     |
+|城区-昌平<br/>   |  0.059<br/>   | 0.085<br/>        |    <br/>          |
+|城区-通州<br/>   | -0.372<br/>   | <.0001<br/>       |    <br/>          |
+|城区-大兴<br/>   | -0.419<br/>   |  <.0001<br/>      |                   |
+|城区-顺义<br/>   | -0.456<br/>   | <.0001<br/>       |                   |
+|城区-房山        | -0.808        | <.0001            |                   |
++:---------------:+:-------------:+:-----------------:+:-----------------:+
+|                 |               |                   |                   |
++:---------------:+:-------------:+:-----------------:+:-----------------:+
+|F检验            |p值<.0001      |  调整后的$R^2$    | 0.6443            |
++:---------------:+:-------------:+:-----------------:+:-----------------:+
+|                 |               |                   |                   |
++:---------------:+:-------------:+:-----------------:+:-----------------:+
+</table>
+
+### $\textbf{·}$ 模型验证
+
+<span style="font-family:楷体;font-size:17px;">　　首先，编写一个用于交叉验证的函数*pred.cv*如下：</span>
+
+```{r}
+pred.cv <- function(dat, k){
+  ind <- sample(1:k, nrow(dat), replace = T)
+  pred_cv <- rep(0, nrow(dat))
+  for (i in 1:k){
+    ii <- which(ind == i)
+    obj <- lm(rent~ area + bedroom + bathroom + heating + subway + region, 
+                     data = dat[-ii,])
+    pred_cv[ii] <- predict(obj, dat[ii,])
+  }
+  rmse <- sqrt(mean((pred_cv - dat$rent)^2))
+  return (list(pred_cv = pred_cv, rmse = rmse))
+}
+```
+
+<span style="font-family:楷体;font-size:17px;">　　使用该函数，对上述经过BIC准则修正过的模型进行五折交叉验证,重复50次，运行如下：</span>
+
+```{r results = 'hide'}
+set.seed(1234)
+rmses <- rep(0, 50)
+for (i in 1:50) {
+  cat(i, '\r')
+  pred_cv <- pred.cv(dat = house.data, k = 5)
+  rmses[i] <- pred_cv$rmse
+}
+```
+<span style="font-family:楷体;font-size:17px;">　　计算这50次的五折交叉验证的平均mse如下：</span>
+```{r}
+mean(rmses)
+```
+<span style="font-family:楷体;font-size:17px;">　　可以看到，平均mse不大，只有0.455（在rent以“千元”为单位时），说明了模型的合理性。</span>
+
+
+
+
+
+
+### $\textbf{·}$ 模型改进
+
+<span style="font-family:楷体;font-size:17px;">　　在前述模型诊断中，发现模型存在一定程度上的非线性以及异方差现象，现使用对数回归模型，改进原模型。</span>
+
+```{r}
+lm2 = lm(log(rent)~ area + room + bedroom + livingroom + bathroom + heating + floor_grp + subway + region, 
+         data = house.data)
+par(mfrow = c(1,2))
+plot(lm1, which = c(1), ylab('原模型'), asp=0.6)
+plot(lm2, which = c(1), ylab('对数模型'), asp=0.6)
+```
+
+<span style="font-family:楷体;font-size:17px;">　　可以看到，使用对数线性回归模型，异方差问题和非线性问题均得到一定程度上的改善。</span>
+
+<span style="font-family:楷体;font-size:17px;">　　对该对数模型使用BIC准则进行选择：</span>
+
+```{r results='hide'} 
+slm2 <- step(lm2, direction = 'both', k = log(dim(house.data)[1]))
+```
+```{r results='hide'}
+summary(slm2)
+```
+
+<span style="font-family:楷体;font-size:17px;">　　使用对数模型时，对y的预测应该为$e^{x^T\beta + \frac{\sigma^2}{2}}$(在上次作业时有过证明)。而因为$\sigma$未知，故我们用数据拟合出来的$\widehat{\sigma}$来代替$\sigma$。使用以下新的自定义五折交叉验证函数对其进行验证：</span>
+
+```{r results='hide'}
+pred.cv1 <- function(dat, k){
+  ind <- sample(1:k, nrow(dat), replace = T)
+  pred_cv <- rep(0, nrow(dat))
+  for (i in 1:k){
+    ii <- which(ind == i)
+    obj <- lm(log(rent)~ area + bedroom + bathroom + heating + subway + region, data = dat[-ii,])
+    sigma <- summary(obj)$sigma
+    pred_cv[ii] <- exp(predict(obj, dat[ii,]) + 0.5*sigma ^2)
+  }
+  rmse <- sqrt(mean((pred_cv - dat$rent)^2))
+  return (list(pred_cv = pred_cv, rmse = rmse))
+}
+
+set.seed(1234)
+rmses <- rep(0, 50)
+for (i in 1:50) {
+  cat(i, '\r')
+  pred_cv1 <- pred.cv1(dat = house.data, k = 5)
+  rmses[i] <- pred_cv1$rmse
+}
+```
+```{r}
+mean(rmses)
+```
+
+
+<span style="font-family:楷体;font-size:17px;">　　可以看到，使用对数线性模型，模型性能得到一定程度上的优化，rmse降低了约0.81%。</span>
+
+<span style="font-family:楷体;font-size:17px;">　　(注：因为在五折交叉验证时，我计算的是“预测出来的rent值”来与“真实的rent值”进行残差评估，这一点与普通的线性模型是一致的，故我比较了两者的平均rmse。)</span>
+
+
+
+
+
+
+
+
+
+
+
+

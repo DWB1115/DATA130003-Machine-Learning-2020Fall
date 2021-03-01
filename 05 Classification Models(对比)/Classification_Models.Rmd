@@ -1,0 +1,201 @@
+---
+title: "征信系列-用户行为数据分析"
+author: <span style="font-family:楷体;font-size:23px;">DWB</span>
+date: "2020/12/13"
+output: 
+  html_document:
+    toc: true
+    toc_depth: 4
+    toc_float:
+      collapsed: false
+      smooth_scroll: false
+---
+
+
+## $\textbf{·}$ 数据读入
+
+<span style="font-family:楷体;font-size:19px;">　　将训练数据集simudata.csv读入：</span>
+
+```{r message=FALSE, warning=FALSE}
+setwd("E:\\大学\\课程\\专业必修\\大三上\\统计机器学习\\HW\\HW6")
+all.data <- read.csv(file="simudata.csv", header=T)
+all.data$black <- as.factor(all.data$black)
+```
+
+
+
+## $\textbf{·}$ 数据集划分
+
+<span style="font-family:楷体;font-size:19px;">　　设置随机数种子为1234，将数据集按照7：3的比例划分为训练集和测试集如下：</span>
+
+```{r message=FALSE, warning=FALSE}
+set.seed(1234)
+sub <- sample(1 : nrow(all.data), round(nrow(all.data) * 0.7))
+train.data <- all.data[sub, ]
+test.data <- all.data[-sub, ]
+```
+
+
+## $\textbf{·}$ 六种模型的建立与预测
+
+### $\textbf{·}$ 逻辑回归
+
+<span style="font-family:楷体;font-size:19px;">　　使用逻辑回归模型在训练集上进行建模，并在测试集上预测，并绘制ROC曲线如下：</span>
+
+```{r message=FALSE, warning=FALSE}
+logistic.model <- glm(black ~ ., family = "binomial", data = train.data) 
+logistic.pred <- predict(logistic.model, test.data, type = "response")
+library(pROC)
+logistic.roc <- roc(test.data$black, logistic.pred)
+x1 <- 1 - logistic.roc$specificities
+y1 <- logistic.roc$sensitivities
+library(ggplot2)
+ggplot(mapping = aes(x = x1, y = y1)) + geom_line(colour = 'red') +
+  geom_abline(intercept = 0, slope = 1) +
+  annotate('text', x = 0.35, y = 0.55, label = paste('AUC=',round(logistic.roc$auc,4))) +
+  labs(x = '1 - Specificity',y = 'Sensitivity', title = 'ROC Curve of Logistic Regression')
+```
+
+<span style="font-family:楷体;font-size:19px;">　　逻辑回归在训练集上预测的AUC值为0.8324。</span>
+
+### $\textbf{·}$ kNN
+
+<span style="font-family:楷体;font-size:19px;">　　使用kNN模型在训练集上进行建模，并在测试集上预测，并绘制ROC曲线如下：</span>
+
+```{r message=FALSE, warning=FALSE}
+library(kknn)
+knn.model <- kknn(black~., train.data, test.data)
+knn.pred <- predict(knn.model, newdata = test.data, type = 'prob')
+library(pROC)
+knn.roc <- roc(test.data$black, as.numeric(knn.pred[, 1]))
+x1 <- 1 - knn.roc$specificities
+y1 <- knn.roc$sensitivities
+library(ggplot2)
+ggplot(mapping = aes(x = x1, y = y1)) + geom_line(colour = 'red') +
+  geom_abline(intercept = 0, slope = 1) +
+  annotate('text', x = 0.35, y = 0.5, label = paste('AUC=',round(knn.roc$auc,4))) +
+  labs(x = '1 - Specificity',y = 'Sensitivity', title = 'ROC Curve of kNN')
+```
+
+<span style="font-family:楷体;font-size:19px;">　　k近邻在训练集上预测的AUC值为0.6897。</span>
+
+### $\textbf{·}$ 决策树
+
+<span style="font-family:楷体;font-size:19px;">　　使用决策树模型在训练集上进行建模，并在测试集上预测，并绘制ROC曲线如下：</span>
+
+```{r message=FALSE, warning=FALSE}
+library(rpart)
+dt.model <- rpart(black ~ ., data = train.data, method = "class")
+dt.pred <- predict(dt.model, newdata = test.data)
+library(pROC)
+dt.roc <- roc(test.data$black, dt.pred[ , 2])
+x1 <- 1 - dt.roc$specificities
+y1 <- dt.roc$sensitivities
+library(ggplot2)
+ggplot(mapping = aes(x = x1, y = y1)) + geom_line(colour = 'red') +
+  geom_abline(intercept = 0, slope = 1) +
+  annotate('text', x = 0.35, y = 0.5, label = paste('AUC=',round(dt.roc$auc,4))) +
+  labs(x = '1 - Specificity',y = 'Sensitivity', title = 'ROC Curve of Decision Tree')
+```
+
+<span style="font-family:楷体;font-size:19px;">　　决策树在训练集上预测的AUC值为0.6682。</span>
+
+### $\textbf{·}$ Boosting模型
+
+<span style="font-family:楷体;font-size:19px;">　　使用Boosting模型在训练集上进行建模，并在测试集上预测，并绘制ROC曲线如下：</span>
+
+```{r message=FALSE, warning=FALSE}
+set.seed(1234)
+library(adabag)
+boost.model <- boosting(black~., data = train.data)
+boost.pred <- predict(boost.model, newdata = test.data)
+library(pROC)
+boost.roc <- roc(test.data$black, as.numeric(boost.pred$prob[, 1]))
+x1 <- 1 - boost.roc$specificities
+y1 <- boost.roc$sensitivities
+library(ggplot2)
+ggplot(mapping = aes(x = x1, y = y1)) + geom_line(colour = 'red') +
+  geom_abline(intercept = 0, slope = 1) +
+  annotate('text', x = 0.35, y = 0.55, label = paste('AUC=',round(boost.roc$auc,4))) +
+  labs(x = '1 - Specificity',y = 'Sensitivity', title = 'ROC Curve of Boosting')
+```
+
+<span style="font-family:楷体;font-size:19px;">　　Boosting在训练集上预测的AUC值为0.8120。</span>
+
+
+### $\textbf{·}$ 随机森林
+
+<span style="font-family:楷体;font-size:19px;">　　使用随机森林模型在训练集上进行建模，并在测试集上预测，并绘制ROC曲线如下：</span>
+
+```{r message=FALSE, warning=FALSE}
+set.seed(1234)
+library(randomForest)
+rf.model <- randomForest(black~., data=train.data)
+rf.pred <- predict(rf.model, newdata=test.data, type='prob')
+library(pROC)
+rf.roc <- roc(test.data$black, as.numeric(rf.pred[, 1]))
+x1 <- 1 - rf.roc$specificities
+y1 <- rf.roc$sensitivities
+library(ggplot2)
+ggplot(mapping = aes(x = x1, y = y1)) + geom_line(colour = 'red') +
+  geom_abline(intercept = 0, slope = 1) +
+  annotate('text', x = 0.35, y = 0.55, label = paste('AUC=',round(rf.roc$auc,4))) +
+  labs(x = '1 - Specificity',y = 'Sensitivity', title = 'ROC Curve of Random Forest')
+```
+
+<span style="font-family:楷体;font-size:19px;">　　随机森林在训练集上预测的AUC值为0.8074。</span>
+
+### $\textbf{·}$ SVM
+
+<span style="font-family:楷体;font-size:19px;">　　使用SVM模型在训练集上进行建模，并在测试集上预测，并绘制ROC曲线如下：</span>
+
+```{r message=FALSE, warning=FALSE}
+library(e1071)
+svm.model <- svm(black~., data = train.data, prob=TRUE)
+svm.pred  <- predict(svm.model, newdata = test.data, prob=TRUE)
+svm.prob <- attr(svm.pred, "probabilities")
+library(pROC)
+svm.roc <- roc(test.data$black, as.numeric(svm.prob[, 1]))
+x1 <- 1 - svm.roc$specificities
+y1 <- svm.roc$sensitivities
+library(ggplot2)
+ggplot(mapping = aes(x = x1, y = y1)) + geom_line(colour = 'red') +
+  geom_abline(intercept = 0, slope = 1) +
+  annotate('text', x = 0.35, y = 0.55, label = paste('AUC=',round(svm.roc$auc,4))) +
+  labs(x = '1 - Specificity',y = 'Sensitivity', title = 'ROC Curve of SVM')
+```
+
+<span style="font-family:楷体;font-size:19px;">　　SVM在训练集上预测的AUC值为0.8167。</span>
+
+
+## $\textbf{·}$ 模型对比与选择
+<span style="font-family:楷体;font-size:19px;">　　将各个模型ROC绘制在一张图中，展示如下：</span>
+```{r message=FALSE, warning=FALSE}
+library(ggplot2)
+ggroc(list(Logistic.Regression=logistic.roc, kNN=knn.roc, Decision.Tree=dt.roc, Boosting=boost.roc, Random.Forest=rf.roc, SVM=svm.roc), legacy.axes = TRUE) +  
+  labs(x = "FPR", y = "TPR", title = "ROC of Different Models") +
+    geom_segment(aes(x = 0, xend = 1, y = 0, yend = 1), color="darkgrey", linetype="dashed")
+```
+
+<span style="font-family:楷体;font-size:19px;">　　从图中可以直观地看出，除了决策树与k近邻模型外，其余4个模型：逻辑回归、Boosting、随机森林、SVM的ROC曲线都比较接近。可以知道在该问题中，逻辑回归、Boosting、随机森林、SVM模型效果较为接近，都很不错；相比之下，决策树与k近邻模型效果较差。</span>
+
+
+<span style="font-family:楷体;font-size:19px;">　　此外，各个模型AUC可以由柱状图展示如下：</span>
+```{r message=FALSE, warning=FALSE}
+aucs <- data.frame(models = c('逻辑回归','kNN','决策树','Boosting','随机森林','SVM'),values = c(round(logistic.roc$auc,4), round(knn.roc$auc,4),round(dt.roc$auc,4), round(boost.roc$auc,4), Random.Forest=round(rf.roc$auc,4), round(svm.roc$auc,4)))
+color <- c( '#0000CD', '#ADD8E6', '#F0FFFF', '#00BFFF', '#87CEFA', '#0000FF')
+library(ggplot2)
+ggplot(mapping = aes(x = reorder(models, -values), y = values), data = aucs) + 
+  geom_bar(stat='identity',  width = 0.45, fill = color) + labs(x="模型名称", y = "训练集上的AUC值", title = "各模型AUC对比图") +
+  geom_text(mapping = aes(label = values), size = 4, vjust = -0.5)
+
+```
+
+<span style="font-family:楷体;font-size:19px;">　　可以看到，在所有模型中，逻辑回归模型具有最高的AUC值0.8324，SVM、Boosting、随机森林模型也都非常接近；kNN和决策树在测试集上AUC较低。</span>
+
+<span style="font-family:楷体;font-size:19px;">　　因此，对该问题应当选取的最优模型是逻辑回归模型，因为它有着最大的AUC值，意味着它有着最小的排队损失，相比于其他模型，它更可能正确地区分正例和负例。</span>
+
+
+
+
+

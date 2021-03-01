@@ -1,0 +1,206 @@
+---
+title: "客户流失预警分析"
+author: <span style="font-family:楷体;font-size:23px;">DWB</span>
+date: "2020/10/29"
+output: 
+  html_document:
+    toc: true
+    toc_depth: 4
+    toc_float:
+      collapsed: false
+      smooth_scroll: false
+---
+
+### $\textbf{·}$ 数据读入
+<span style="font-family:楷体;font-size:17px;">　　将训练数据集sampledata.csv与测试数据集predata.csv读入，并将其中的变化率乘100，变为百分数：</span>
+```{r message=FALSE, warning=FALSE}
+setwd("E:\\大学\\课程\\专业必修\\大三上\\统计机器学习\\HW\\HW4\\客户流失预警分析")
+sample.data <- read.csv(file="sampledata.csv", header=T)
+sample.data$chgdegree <- 100*sample.data$chgdegree
+sample.data$chgexpense <- 100*sample.data$chgexpense
+test.data <- read.csv(file="preddata.csv", header=T)
+test.data$chgdegree <- 100*test.data$chgdegree
+test.data$chgexpense <- 100*test.data$chgexpense
+```
+
+
+### $\textbf{·}$ 因变量和各自变量的箱线图
+<span style="font-family:楷体;font-size:17px;">　　首先以是否违约作为分类标准，分别创建每个自变量关于因变量的箱线图并储存：</span>
+```{r message=FALSE, warning=FALSE}
+library(ggplot2)
+library(grid)
+pic1 <- ggplot(sample.data, aes(group = churn, x=churn, y=tenure)) + 
+  geom_boxplot(fill = c('#FFB6C1', '#00FFFF')) + labs(title="在网时长-是否流失箱线图", x="是否流失", y = "在网时长(天)")
+pic2 <- ggplot(sample.data, aes(group = churn, x=churn, y=expense)) + 
+  geom_boxplot(fill = c('#FFB6C1', '#00FFFF')) + labs(title="当月花费-是否流失箱线图", x="是否流失", y = "当月花费(元)")
+pic3 <- ggplot(sample.data, aes(group = churn, x=churn, y=degree)) + 
+  geom_boxplot(fill = c('#FFB6C1', '#00FFFF')) + labs(title="个体度-是否流失箱线图", x="是否流失", y = "个体度(人数)")
+pic4 <- ggplot(sample.data, aes(group = churn, x=churn, y=tightness)) + 
+  geom_boxplot(fill = c('#FFB6C1', '#00FFFF')) + labs(title="联系强度-是否流失箱线图", x="是否流失", y = "联系强度(分钟/人)")
+pic5 <- ggplot(sample.data, aes(group = churn, x=churn, y=entropy)) + 
+  geom_boxplot(fill = c('#FFB6C1', '#00FFFF')) + labs(title="个体信息熵-是否流失箱线图", x="是否流失", y = "个体信息熵")
+pic6 <- ggplot(sample.data, aes(group = churn, x=churn, y=(chgdegree))) + 
+  geom_boxplot(fill = c('#FFB6C1', '#00FFFF')) + labs(title="个体度变化-是否流失箱线图", x="是否流失", y = "个体度变化(%)")
+pic7 <- ggplot(sample.data, aes(group = churn, x=churn, y=(chgexpense))) +
+  geom_boxplot(fill = c('#FFB6C1', '#00FFFF')) + labs(title="花费变化-是否流失箱线图", x="是否流失", y = "花费变化(%)")
+```
+
+<span style="font-family:楷体;font-size:17px;">　　将这些箱线图绘制如下：</span>
+```{r warning=FALSE, message=FALSE}
+grid.newpage() 
+pushViewport(viewport(layout = grid.layout(9,15)))
+vplayout <- function(x,y){
+  viewport(layout.pos.row = x, layout.pos.col = y)
+}
+print(pic1, vp = vplayout(1:8,1:7))   
+print(pic2, vp = vplayout(1:8,9:15))   
+grid.newpage() 
+pushViewport(viewport(layout = grid.layout(9,15)))
+vplayout <- function(x,y){
+  viewport(layout.pos.row = x, layout.pos.col = y)
+}
+print(pic3, vp = vplayout(1:8,1:7))   
+print(pic4, vp = vplayout(1:8,9:15))
+grid.newpage() 
+pushViewport(viewport(layout = grid.layout(9,15)))
+vplayout <- function(x,y){
+  viewport(layout.pos.row = x, layout.pos.col = y)
+}
+print(pic6, vp = vplayout(1:9,1:7))   
+print(pic7, vp = vplayout(1:9,9:15)) 
+grid.newpage() 
+pushViewport(viewport(layout = grid.layout(9,15)))
+vplayout <- function(x,y){
+  viewport(layout.pos.row = x, layout.pos.col = y)
+}
+print(pic5, vp = vplayout(1:8,5:11))   
+```
+
+<span style="font-family:楷体;font-size:17px;">　　可以看到，相比于没有流失的客户，那些流失的客户相对有着平均较低的在网时间，更低的当月花费，更低的个体度（联系人数量）及信息熵；并且流失的客户相比之下，有着个体度（联系人数量）变少、花费变少的特点，在联系强度方面，差异并不显著。</span>
+
+### $\textbf{·}$ 变量标准化与模型建立
+
+<span style="font-family:楷体;font-size:17px;">　　首先，将训练集数据的自变量进行标准化处理如下，使其样本均值为0，样本方差为1：</span>
+```{r message=FALSE, warning=FALSE}
+sample.data$tenure <- scale(sample.data$tenure)
+sample.data$expense <- scale(sample.data$expense)
+sample.data$degree <- scale(sample.data$degree)
+sample.data$tightness <- scale(sample.data$tightness)
+sample.data$entropy <- scale(sample.data$entropy)
+sample.data$chgdegree <- scale(sample.data$chgdegree)
+sample.data$chgexpense <- scale(sample.data$chgexpense)
+```
+
+<span style="font-family:楷体;font-size:17px;">　　构建模型并查看如下：</span>
+```{r message=FALSE, warning=FALSE}
+model <- glm(churn ~ tenure + expense + degree  + entropy + tightness + chgdegree + chgexpense, 
+            family = "binomial", data = sample.data) 
+summary(model)
+```
+<span style="font-family:楷体;font-size:17px;">　　系数可以由柱状图展示如下：</span>
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+coef <- data.frame(summary(model)$coefficients)
+coef.values <- coef[order(coef$Estimate),]$Estimate[2:8]
+names <- c('个体度', '个体度变化', '个体信息熵', '当月花费', '在网时长', '联系强度', '花费变化')
+color <- c('#00008B', '#0000CD', '#0000FF', '#00BFFF', '#87CEFA', '#ADD8E6', '#F0FFFF')
+ggplot(mapping = aes(x = reorder(names, coef.values), y = coef.values)) + 
+  geom_bar(stat='identity',  width = 0.5, fill = color) + labs(x="自变量名称", y = "回归系数", title = "回归系数图") +
+  geom_text(mapping = aes(label = round(coef.values, 3)), vjust = 1)
+
+```
+
+<span style="font-family:楷体;font-size:17px;">　　首先从回归结果的汇总来看，所有的自变量均有很小的p值，另外由于各自变量均已标准化，因此由上图可以看到，所有的自变量均为负数，可以理解为：个体度越大、个体度正向变化越大、个体信息熵越大、当月花费越大、在网时长越长、联系强度越高、花费正向变化越大的个体，越不容易流失；且个体度对是否流失影响最大。</span>
+
+
+### $\textbf{·}$ 使用模型进行预测
+<span style="font-family:楷体;font-size:17px;">　　使用上述模型对训练集数据进行预测，因为样本正、反例不均衡，由$\frac{r}{1-r}=\frac{m^+}{m^-}$，知我们可以将设阈值设置为$r=\frac{m^+}{m^++m^-}$。</span>
+
+```{r message=FALSE, warning=FALSE}
+m0 <- as.integer(table(sample.data$churn)[1])
+m1 <- as.integer(table(sample.data$churn)[2])
+r <- m1/(m1 + m0)
+```
+
+#### $\textbf{·}$ 模型对训练集数据的预测
+<span style="font-family:楷体;font-size:17px;">　　使用模型对训练集数据预测如下：</span>
+```{r message=FALSE, warning=FALSE}
+prob1 <- predict(object = model, newdata = sample.data, type = "response")
+pred1 <- ifelse(prob1 >= r, "yes", "no")
+pred1 <- factor(pred1, levels = c("yes","no"), order=TRUE)
+table(sample.data$churn, pred1)
+```
+<span style="font-family:楷体;font-size:17px;">　　可以将结果以下表展示：</span>
+```{r echo=FALSE, out.width = '75%'}
+knitr::include_graphics("E:\\大学\\课程\\专业必修\\大三上\\统计机器学习\\HW\\HW4\\客户流失预警分析\\pic1.png")
+```
+
+<span style="font-family:楷体;font-size:17px;">　　可以算得在训练集上，模型的预测精度为$Accuarancy = \frac{441+32858}{48393}=68.81\%$，查准率$Precision =$ $\frac{441}{15360}=2.87\%$，查全率$Recall = \frac{441}{616}=71.59\%$。因为该预测更关心查全率，因此可以知道，查全率($Recall$)更为重要，而对于那些错分的 $False Positive$，很可能是因为这些客户也在将要流失的边缘。因此可以认为，模型取得了不错的预测效果。</span>
+
+
+#### $\textbf{·}$ 模型对测试集数据的预测
+<span style="font-family:楷体;font-size:17px;">　　首先，将测试集数据的所有自变量进行与训练集数据相同的标准化，使其样本均值为0，样本方差为1：</span>
+```{r message=FALSE, warning=FALSE}
+test.data$tenure <- scale(test.data$tenure)
+test.data$expense <- scale(test.data$expense)
+test.data$degree <- scale(test.data$degree)
+test.data$tightness <- scale(test.data$tightness)
+test.data$entropy <- scale(test.data$entropy)
+test.data$chgdegree <- scale(test.data$chgdegree)
+test.data$chgexpense <- scale(test.data$chgexpense)
+```
+
+<span style="font-family:楷体;font-size:17px;">　　使用模型对测试集数据预测如下：</span>
+```{r message=FALSE, warning=FALSE}
+prob2 <- predict(object = model, newdata = test.data, type = "response")
+pred2 <- ifelse(prob2 >= r,"yes","no")
+pred2 <- factor(pred2,levels = c("yes","no"),order=TRUE)
+table(test.data$churn, pred2)
+```
+
+<span style="font-family:楷体;font-size:17px;">　　可以将结果以下表展示：</span>
+
+```{r echo=FALSE, out.width = '75%'}
+knitr::include_graphics("E:\\大学\\课程\\专业必修\\大三上\\统计机器学习\\HW\\HW4\\客户流失预警分析\\pic2.png")
+```
+
+
+
+<span style="font-family:楷体;font-size:17px;">　　可以算得在测试集上，模型的预测精度为$Accuarancy = \frac{510+32521}{47900}=68.96\%$，查准率$Precision =$ $\frac{510}{15196}=3.36\%$，查全率$Recall = \frac{510}{693}=73.59\%$。同理在测试数据集上，查全率($Recall$)也较高，可以认为模型在测试集上也取得了不错的预测效果，没有出现严重的过拟合现象。</span>
+
+### $\textbf{·}$ ROC曲线与相应的AUC值
+
+#### $\textbf{·}$ 训练集数据
+<span style="font-family:楷体;font-size:17px;">　　上述模型在训练集数据上的ROC曲线与AUC值如下所示：</span>
+```{r message=FALSE, warning=FALSE}
+library(pROC)
+roc_curve <- roc(sample.data$churn, prob1)
+x1 <- 1 - roc_curve$specificities
+y1 <- roc_curve$sensitivities
+
+ggplot(mapping = aes(x = x1, y = y1)) + geom_line(colour = 'red') + geom_abline(intercept = 0, slope = 1) +
+  annotate('text', x = 0.3, y = 0.5, label = paste('AUC=', round(roc_curve$auc,4))) +
+  labs(x = '1 - Specificity',y = 'Sensitivity', title = 'ROC Curve of Training Data')
+```
+
+<span style="font-family:楷体;font-size:17px;">　　可以看到在训练数据集上，AUC曲线显著高于$y=x$直线，并且可以算得$AUC$的值为0.7754，说明该模型拥有不错的预测效果。</span>
+
+#### $\textbf{·}$ 测试集数据
+<span style="font-family:楷体;font-size:17px;">　　上述模型在测试集数据上的ROC曲线与AUC值如下所示：</span>
+```{r message=FALSE, warning=FALSE}
+library(pROC)
+roc_curve <- roc(test.data$churn, prob2)
+x2 <- 1 - roc_curve$specificities
+y2 <- roc_curve$sensitivities
+
+ggplot(mapping = aes(x = x2, y = y2)) + geom_line(colour = 'red') + geom_abline(intercept = 0, slope = 1) +
+  annotate('text', x = 0.3, y = 0.5, label = paste('AUC=', round(roc_curve$auc,4))) +
+  labs(x = '1 - Specificity',y = 'Sensitivity', title = 'ROC Curve of Testing Data')
+```
+
+<span style="font-family:楷体;font-size:17px;">　　可以看到在测试数据集上，AUC曲线依然显著高于$y=x$直线，并且可以算得$AUC$的值为0.7830，甚至高于在训练集上的表现。该模型在测试集上依然拥有不错的预测效果，说明我们得到的模型并没有出现过拟合现象。</span>
+
+
+
+
+
+

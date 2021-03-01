@@ -1,0 +1,86 @@
+---
+title: "市长电话分析"
+author: <span style="font-family:楷体;font-size:23px;">DWB</span>
+date: "2020/11/12"
+output: 
+  html_document:
+    toc: true
+    toc_depth: 4
+    toc_float:
+      collapsed: false
+      smooth_scroll: false
+---
+### $\textbf{·}$ 数据读入与投诉分布
+<span style="font-family:楷体;font-size:17px;">　　将训练数据集train_set.csv与测试数据集test_set.csv读入：</span>
+
+```{r message=FALSE, warning=FALSE}
+setwd("E:\\大学\\课程\\专业必修\\大三上\\统计机器学习\\HW\\HW5\\市长电话分析")
+train.data <- read.csv(file="train_set.csv", header=T)
+test.data <- read.csv(file="test_set.csv", header=T)
+```
+
+<span style="font-family:楷体;font-size:17px;">　　将各政府单位收到的投诉量做柱状图，按照降序展示如下：</span>
+
+```{r message=FALSE, warning=FALSE}
+library(ggplot2)
+color <- c('#00008B', '#0000CD', '#0000FF', '#00BFFF', '#87CEFA', '#ADD8E6', '#F0FFFF')
+ggplot(train.data, aes(x=reorder(单位名称, rep(-1, length(单位名称)), sum))) + 
+  geom_bar(width = 0.5, fill = color) + 
+  labs(title="各单位接到投诉量柱状图",x="政府部门", y = "投诉量(条)") +
+  geom_text(aes(label=..count..), stat="count", vjust = -0.3)
+```
+
+<span style="font-family:楷体;font-size:17px;">　　根据上述结果，我们可以看到，收集到的投诉信息分布不均匀，投向市水务集团的投诉信息最多，为557条；投向市供电公司的投诉量最少，有93条；市供热公司、市运输管理局、市燃气集团收到的投诉量相当，为300条左右；投诉量在各个部门之间的差距较为明显。</span>
+
+### $\textbf{·}$ 每条投诉用词数的分布直方图
+<span style="font-family:楷体;font-size:17px;">　　首先为训练集添加一列“用词数”，使用rowSum来标识，记录每条投诉记录的用词数目：</span>
+
+```{r message=FALSE, warning=FALSE}
+train.data$rowSum <- rowSums(train.data[,-1])
+```
+
+<span style="font-family:楷体;font-size:17px;">　　绘制每条投诉用词数的分布直方图如下：</span>
+
+```{r message=FALSE, warning=FALSE}
+ggplot(train.data, aes(x=rowSum)) + geom_bar(width = 2, fill = "#6495ED")
+```
+
+<span style="font-family:楷体;font-size:17px;">　　我们可以看到，每条投诉的用词数呈现幂律分布的特点，那些用词较少的投诉占据绝大多数，只有较少的投诉信息用到了较多的词汇，整体分布呈现右偏。</span>
+
+
+### $\textbf{·}$ 政府部门-投诉信息词汇量箱线图
+<span style="font-family:楷体;font-size:17px;">　　我们将投诉信息按照政府部门进行分组，并按照中位数升序进行排列，绘制箱线图如下：</span>
+
+```{r warning=FALSE, message=FALSE}
+ggplot(train.data, aes(x=reorder(单位名称, rowSum, median), y=rowSum)) + 
+  geom_boxplot(fill = '#00BFFF') + 
+  labs(title="政府单位-投诉信息词汇量 分组箱线图",x="政府单位", y = "投诉信息词汇量(个)")
+```
+
+<span style="font-family:楷体;font-size:17px;">　　可以看到，各政府部门之间，投诉信息用词数的分布差异并不大，中位数都非常接近，而用词数特别多的投诉都只是少部分的离群点。无论在哪个部门，投诉信息都近似保持着上文中幂律分布的特点。</span>
+
+### $\textbf{·}$ 模型建立与预测
+#### $\textbf{·}$ 朴素贝叶斯建模
+<span style="font-family:楷体;font-size:17px;">　　考虑到文本较短，先将训练集、测试集数据中使用过的词汇都按照“是否使用”来代替使用频数，并使用训练集数据训练模型：</span>
+
+```{r warning=FALSE, message=FALSE}
+train.data[, -1] <- train.data[, -1] > 0
+test.data[, -1] <- test.data[, -1] > 0
+library(e1071)
+model <- naiveBayes(单位名称 ~ ., data = train.data)
+```
+
+#### $\textbf{·}$ 对测试集的预测及评估
+
+<span style="font-family:楷体;font-size:17px;">　　使用我们训练得到的模型来对测试集数据进行预测，并将结果以混淆矩阵展示如下：</span>
+
+```{r warning=FALSE, message=FALSE}
+pred <- predict(model, test.data[, -1])
+mx <- as.data.frame(table(true.class = test.data$单位名称, predict.class = pred))
+ggplot(mx, aes(predict.class, true.class)) + 
+  geom_tile(aes(fill = Freq), color = "white") + 
+  scale_fill_gradient(low = "white", high = "#4169E1") + 
+  geom_text(aes(label=Freq), color="black") + labs(title = '训练集预测混淆矩阵')
+```
+
+<span style="font-family:楷体;font-size:17px;">　　根据混淆矩阵，我们可以计算得到预测精度Accurancy = 97%，可以发现，在测试集上我们依然可以取得非常好的预测效果，模型没有出现过拟合现象。  </span>
